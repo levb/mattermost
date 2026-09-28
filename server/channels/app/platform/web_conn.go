@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unique"
 
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
@@ -98,7 +99,7 @@ type WebConn struct {
 	PostedAck         bool
 	DisconnectErrCode string
 
-	allChannelMembers         map[string]string
+	allChannelMembers         map[unique.Handle[string]]unique.Handle[string]
 	lastAllChannelMembersTime int64
 	lastUserActivityAt        int64
 	send                      chan model.WebSocketMessage
@@ -933,8 +934,21 @@ func (wc *WebConn) ShouldSendEventToGuest(msg *model.WebSocketEvent) bool {
 	return canSee
 }
 
+// compactChannelID returns the channel ID's shared handle, or zero if empty.
+func compactChannelID(chID string) unique.Handle[string] {
+	if chID == "" {
+		return unique.Handle[string]{}
+	}
+	return unique.Make(chID)
+}
+
 // ShouldSendEvent returns whether the message should be sent or not.
 func (wc *WebConn) ShouldSendEvent(msg *model.WebSocketEvent) bool {
+	return wc.shouldSendEvent(msg, compactChannelID(msg.GetBroadcast().ChannelId))
+}
+
+// shouldSendEvent is ShouldSendEvent with the channel handle pre-resolved.
+func (wc *WebConn) shouldSendEvent(msg *model.WebSocketEvent, chHandle unique.Handle[string]) bool {
 	// IMPORTANT: Do not send event if WebConn does not have a session and completed MFA
 	if !wc.IsAuthenticated() {
 		return false
@@ -1064,11 +1078,14 @@ func (wc *WebConn) ShouldSendEvent(msg *model.WebSocketEvent) bool {
 				mlog.Error("webhub.shouldSendEvent.", mlog.Err(err))
 				return false
 			}
-			wc.allChannelMembers = result
+			wc.allChannelMembers = compactChannelMembers(result)
 			wc.lastAllChannelMembersTime = model.GetMillis()
 		}
 
-		if _, ok := wc.allChannelMembers[chID]; ok {
+		if chHandle == (unique.Handle[string]{}) {
+			chHandle = compactChannelID(chID)
+		}
+		if _, ok := wc.allChannelMembers[chHandle]; ok {
 			return true
 		}
 		return false
@@ -1084,6 +1101,15 @@ func (wc *WebConn) ShouldSendEvent(msg *model.WebSocketEvent) bool {
 	}
 
 	return true
+}
+
+// compactChannelMembers returns the memberships keyed and valued by shared handles.
+func compactChannelMembers(members map[string]string) map[unique.Handle[string]]unique.Handle[string] {
+	compacted := make(map[unique.Handle[string]]unique.Handle[string], len(members))
+	for chID, roles := range members {
+		compacted[unique.Make(chID)] = unique.Make(roles)
+	}
+	return compacted
 }
 
 func (wc *WebConn) notInChannel(val string) bool {

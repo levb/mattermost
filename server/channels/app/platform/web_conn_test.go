@@ -308,12 +308,13 @@ func newShouldSendEventBenchConn(tb testing.TB, th *TestHelper, memberChannels i
 	}, th.Suite, &hookRunner{})
 
 	channelIDs := make([]string, 0, memberChannels)
-	wc.allChannelMembers = make(map[string]string, memberChannels)
+	members := make(map[string]string, memberChannels)
 	for range memberChannels {
 		id := model.NewId()
 		channelIDs = append(channelIDs, id)
-		wc.allChannelMembers[id] = model.ChannelUserRoleId
+		members[id] = model.ChannelUserRoleId
 	}
+	wc.allChannelMembers = compactChannelMembers(members)
 	wc.lastAllChannelMembersTime = model.GetMillis()
 
 	return wc, channelIDs

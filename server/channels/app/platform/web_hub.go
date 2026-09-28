@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+	"unique"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
@@ -556,11 +557,11 @@ func (h *Hub) recordPostDelivery(marker *model.PostDeliveryMarker, userID string
 // should receive the event. A post delivery is recorded only when the event is actually
 // enqueued onto the connection's send buffer — never before the ShouldSendEvent check, and
 // never on the default branch where the buffer is full and the connection is dropped.
-func (h *Hub) broadcastToConn(connIndex *hubConnectionIndex, webConn *WebConn, msg *model.WebSocketEvent, marker *model.PostDeliveryMarker, broadcastHooks []string, broadcastHookArgs []map[string]any) {
+func (h *Hub) broadcastToConn(connIndex *hubConnectionIndex, webConn *WebConn, msg *model.WebSocketEvent, chHandle unique.Handle[string], marker *model.PostDeliveryMarker, broadcastHooks []string, broadcastHookArgs []map[string]any) {
 	if !connIndex.Has(webConn) {
 		return
 	}
-	if webConn.ShouldSendEvent(msg) {
+	if webConn.shouldSendEvent(msg, chHandle) {
 		select {
 		case webConn.send <- h.runBroadcastHooks(msg, webConn, broadcastHooks, broadcastHookArgs):
 			h.recordPostDelivery(marker, webConn.UserId)
@@ -769,8 +770,15 @@ func (h *Hub) Start() {
 
 				msg = msg.PrecomputeJSON()
 
+				fastIteration := *h.platform.Config().ServiceSettings.EnableWebHubChannelIteration
+
+				var chHandle unique.Handle[string]
+				if !fastIteration {
+					chHandle = compactChannelID(msg.GetBroadcast().ChannelId)
+				}
+
 				broadcast := func(webConn *WebConn) {
-					h.broadcastToConn(connIndex, webConn, msg, deliveryMarker, broadcastHooks, broadcastHookArgs)
+					h.broadcastToConn(connIndex, webConn, msg, chHandle, deliveryMarker, broadcastHooks, broadcastHookArgs)
 				}
 
 				// Quick return for a single connection.
@@ -779,7 +787,6 @@ func (h *Hub) Start() {
 					continue
 				}
 
-				fastIteration := *h.platform.Config().ServiceSettings.EnableWebHubChannelIteration
 				var targetConns iter.Seq[*WebConn]
 				if userID := msg.GetBroadcast().UserId; userID != "" {
 					targetConns = connIndex.ForUser(userID)

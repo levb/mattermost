@@ -6,6 +6,7 @@ package platform
 import (
 	"testing"
 	"time"
+	"unique"
 
 	"github.com/stretchr/testify/require"
 
@@ -73,7 +74,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
-		hub.broadcastToConn(connIndex, wc, newEvent(), marker, nil, nil)
+		hub.broadcastToConn(connIndex, wc, newEvent(), unique.Handle[string]{}, marker, nil, nil)
 
 		require.Len(t, spy.calls, 1)
 		require.Equal(t, marker, spy.calls[0].marker)
@@ -91,7 +92,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		connIndex.Remove(wc)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
-		hub.broadcastToConn(connIndex, wc, newEvent(), marker, nil, nil)
+		hub.broadcastToConn(connIndex, wc, newEvent(), unique.Handle[string]{}, marker, nil, nil)
 
 		require.Empty(t, spy.calls)
 	})
@@ -106,7 +107,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 0)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
-		hub.broadcastToConn(connIndex, wc, newEvent(), marker, nil, nil)
+		hub.broadcastToConn(connIndex, wc, newEvent(), unique.Handle[string]{}, marker, nil, nil)
 
 		require.Empty(t, spy.calls)
 	})
@@ -124,7 +125,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		authorEvent.Add("post", "{}")
 
 		hub := th.Service.GetHubForUserId(th.BasicUser.Id)
-		hub.broadcastToConn(connIndex, wc, authorEvent, marker, nil, nil)
+		hub.broadcastToConn(connIndex, wc, authorEvent, compactChannelID(authorEvent.GetBroadcast().ChannelId), marker, nil, nil)
 
 		require.Empty(t, spy.calls, "the author's own post echo is not a delivery")
 		require.Len(t, wc.send, 1, "the event still reaches the author")
@@ -139,7 +140,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
-		hub.broadcastToConn(connIndex, wc, newEvent(), nil, nil, nil)
+		hub.broadcastToConn(connIndex, wc, newEvent(), unique.Handle[string]{}, nil, nil, nil)
 
 		require.Empty(t, spy.calls)
 		require.Len(t, wc.send, 1)
@@ -153,7 +154,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
 		require.NotPanics(t, func() {
-			hub.broadcastToConn(connIndex, wc, newEvent(), marker, nil, nil)
+			hub.broadcastToConn(connIndex, wc, newEvent(), unique.Handle[string]{}, marker, nil, nil)
 		})
 	})
 }
