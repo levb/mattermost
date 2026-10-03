@@ -42,7 +42,7 @@ func newDeliveryTestConn(t *testing.T, th *TestHelper, connIndex *hubConnectionI
 	wc.SetSession(&model.Session{UserId: userID})
 	wc.Active.Store(true)
 	wc.SetSessionExpiresAt(model.GetMillis() + 100000)
-	require.NoError(t, connIndex.Add(wc))
+	connIndex.Add(wc, nil)
 
 	return wc
 }
@@ -70,7 +70,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(spy.record)
 		t.Cleanup(func() { th.Service.SetPostDeliveryRecorder(nil) })
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
@@ -87,7 +87,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(spy.record)
 		t.Cleanup(func() { th.Service.SetPostDeliveryRecorder(nil) })
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 		connIndex.Remove(wc)
 
@@ -102,7 +102,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(spy.record)
 		t.Cleanup(func() { th.Service.SetPostDeliveryRecorder(nil) })
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		// A zero-capacity buffer with no reader means the send always hits the default branch.
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 0)
 
@@ -117,7 +117,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(spy.record)
 		t.Cleanup(func() { th.Service.SetPostDeliveryRecorder(nil) })
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		// BasicUser wrote the post the marker describes.
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser.Id, 1)
 
@@ -136,7 +136,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(spy.record)
 		t.Cleanup(func() { th.Service.SetPostDeliveryRecorder(nil) })
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
@@ -149,7 +149,7 @@ func TestHubBroadcastDelivery(t *testing.T) {
 	t.Run("no recorder configured is a no-op", func(t *testing.T) {
 		th.Service.SetPostDeliveryRecorder(nil)
 
-		connIndex := newHubConnectionIndex(1*time.Second, th.Service.Store, th.Service.logger, false)
+		connIndex := newHubConnectionIndex(1*time.Second, false)
 		wc := newDeliveryTestConn(t, th, connIndex, th.BasicUser2.Id, 1)
 
 		hub := th.Service.GetHubForUserId(th.BasicUser2.Id)
