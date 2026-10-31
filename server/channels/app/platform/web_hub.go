@@ -157,6 +157,9 @@ func (ps *PlatformService) hubStart(broadcastHooks map[string]BroadcastHook) {
 	// Read once: the hub index is built for one mode at start, so a live change
 	// would leave the broadcast path and the index disagreeing until restart.
 	ps.hubChannelIteration = *ps.Config().ServiceSettings.EnableWebHubChannelIteration
+	// One membership load in flight per hub: the concurrency the hubs had when each ran its
+	// own loads one at a time, kept now that the loads run on the callers.
+	ps.membershipLoads = make(chan struct{}, numberOfHubs)
 	ps.logger.Info("Starting websocket hubs", mlog.Int("number_of_hubs", numberOfHubs), mlog.Bool("channel_iteration", ps.hubChannelIteration))
 
 	hubs := make([]*Hub, numberOfHubs)
@@ -410,9 +413,12 @@ func (h *Hub) membershipLock(userID string) *sync.Mutex {
 	return &h.membershipLocks[maphash.String(h.membershipSeed, userID)%webConnMembershipLockStripes]
 }
 
-// loadChannelMembership loads the user's channel IDs from the primary.
+// loadChannelMembership loads the user's channel IDs from the primary, holding one of the
+// node's membershipLoads slots while the query runs.
 func (ps *PlatformService) loadChannelMembership(userID string) (channelList, error) {
+	ps.membershipLoads <- struct{}{}
 	cm, err := ps.Store.Channel().GetAllChannelMembersForUser(store.RequestContextWithMaster(request.EmptyContext(ps.logger)), userID, false, false)
+	<-ps.membershipLoads
 	if err != nil {
 		return channelList{}, fmt.Errorf("error getChannelMembersForUser: %w", err)
 	}

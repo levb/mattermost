@@ -405,6 +405,31 @@ func TestHubMembershipLockOrdersRegisterAndInvalidate(t *testing.T) {
 	})
 }
 
+// TestHubMembershipLoadsAreCapped checks that a load waits for a membershipLoads slot while the slots are taken.
+func TestHubMembershipLoadsAreCapped(t *testing.T) {
+	mainHelper.Parallel(t)
+	th := Setup(t)
+	ps, channelStore := newMembershipTestPlatform(t, th, true)
+	ps.membershipLoads = make(chan struct{}, 1)
+	first, second := model.NewId(), model.NewId()
+	channelStore.setMembers(first, model.NewId())
+	channelStore.setMembers(second, model.NewId())
+
+	// The first load pauses inside the store call, holding the only slot.
+	pause := channelStore.pauseNextLoad()
+	firstRegistered := startGoroutine(func() { require.NoError(t, ps.HubRegister(newBroadcastBenchConn(ps, first))) })
+	<-pause.paused
+
+	secondRegistered := startGoroutine(func() { require.NoError(t, ps.HubRegister(newBroadcastBenchConn(ps, second))) })
+	require.Never(t, func() bool { return channelStore.numCalls.Load() > 1 }, 100*time.Millisecond, 10*time.Millisecond,
+		"the second load must wait for the slot the paused first load holds")
+
+	close(pause.resume)
+	<-firstRegistered
+	<-secondRegistered
+	require.EqualValues(t, 2, channelStore.numCalls.Load())
+}
+
 // TestHubRegisterOnStoppedHubLoadsNothing checks that a registration on a stopped hub returns before loading membership.
 func TestHubRegisterOnStoppedHubLoadsNothing(t *testing.T) {
 	mainHelper.Parallel(t)
