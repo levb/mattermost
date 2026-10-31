@@ -272,6 +272,26 @@ func TestHubMembershipLoadedOffHubGoroutine(t *testing.T) {
 		ps.HubUnregister(wc2)
 	})
 
+	t.Run("channel iteration on: a removed membership stops delivery once the invalidation is applied", func(t *testing.T) {
+		ps, channelStore := newMembershipTestPlatform(t, th, true)
+		left := th.CreateChannel(t, th.BasicTeam)
+		addMember(t, left.Id, th.BasicUser.Id)
+
+		wc := newBroadcastBenchConn(ps, th.BasicUser.Id)
+		require.NoError(t, ps.HubRegister(wc))
+		requireDelivered(t, ps, left.Id, wc)
+
+		require.NoError(t, th.Service.Store.Channel().RemoveMember(th.Context, left.Id, th.BasicUser.Id))
+		ps.InvalidateChannelCacheForUser(th.BasicUser.Id)
+		require.EqualValues(t, 2, channelStore.numCalls.Load(), "the register and the invalidation load once each")
+
+		// The hub dropped the connection from the left channel's entry and kept the others.
+		requireNotDelivered(t, ps, left.Id, wc)
+		requireDelivered(t, ps, th.BasicChannel.Id, wc)
+
+		ps.HubUnregister(wc)
+	})
+
 	t.Run("channel iteration on: a failed load fails the registration", func(t *testing.T) {
 		ps, channelStore := newMembershipTestPlatform(t, th, true)
 		channelStore.simulateDatabaseFailure.Store(true)
